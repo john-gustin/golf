@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fairway Friends Golf</title>
+<meta name="description" content="3D golf with friends in your browser. Play live or take your turn later. No sign-in.">
+<meta property="og:title" content="⛳ Join my round of golf!">
+<meta property="og:description" content="3D golf with friends in your browser. Play live or take your turn later. No sign-in needed.">
+<meta property="og:image" content="https://john-gustin.github.io/golf/og.png">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cellipse cx='32' cy='52' rx='26' ry='8' fill='%233fa34d'/%3E%3Crect x='30' y='8' width='3' height='44' fill='%23eee'/%3E%3Cpath d='M33 8 L54 16 L33 24Z' fill='%23e53935'/%3E%3C/svg%3E">
+<script src="lib/mqtt.min.js"></script>
+<style>
+:root{--bg:#0f1418;--panel:rgba(16,22,28,.86);--line:rgba(255,255,255,.14);--text:#eef3f6;--muted:#a3b2bf;--gold:#f2c14e;--green:#3ccf7a;--red:#ff6b5e;
+  --c0:#f4f4f4;--c1:#ffd23f;--c2:#59c3ff;--c3:#ff8a7a}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:rgba(255,255,255,.08);color:var(--text);border-radius:8px;padding:6px 12px}
+button:hover:not(:disabled){background:rgba(255,255,255,.16)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.primary{background:var(--gold);color:#1f1603;border-color:var(--gold);font-weight:700}
+input[type=text],select{font:inherit;background:#0c1014;color:var(--text);border:1px solid #33404d;border-radius:8px;padding:8px 11px;width:100%}
+#view{position:fixed;inset:0;display:block;width:100vw;height:100vh;cursor:crosshair}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;backdrop-filter:blur(6px)}
+#hud{position:fixed;inset:0;pointer-events:none}
+#hud>*{pointer-events:auto}
+#holeCard{position:fixed;top:12px;left:12px;padding:10px 14px;min-width:250px}
+#holeCard .t{font-size:18px;font-weight:800}
+#holeCard .s{color:var(--muted);font-size:12px}
+#holeCard .r{display:flex;gap:14px;margin-top:6px;font-size:13px;align-items:center}
+#holeCard .big{font-size:22px;font-weight:800}
+#wind{display:flex;align-items:center;gap:6px}
+#windArrow{width:26px;height:26px;transition:transform .3s}
+#lieTag{display:inline-block;padding:1px 7px;border-radius:6px;font-size:12px;font-weight:700;background:rgba(255,255,255,.12)}
+#board{position:fixed;top:12px;right:12px;padding:8px 10px;min-width:230px}
+#board table{border-collapse:collapse;width:100%}
+#board td{padding:3px 5px;font-size:13px}
+#board .dot{width:10px;height:10px;border-radius:50%;display:inline-block;border:1px solid rgba(0,0,0,.4)}
+#board .tp{font-weight:800;text-align:right}
+#board .st{color:var(--muted);font-size:11px;text-align:right;white-space:nowrap}
+#board .hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+#board .hdr b{font-size:12px;letter-spacing:1px;color:var(--muted)}
+#mini{position:fixed;left:12px;top:150px;border-radius:12px;border:1px solid var(--line);cursor:pointer}
+#netBadge{position:fixed;left:12px;bottom:10px;font-size:11px;color:var(--muted);background:var(--panel);padding:3px 9px;border-radius:999px;border:1px solid var(--line)}
+#swing{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);padding:10px 14px;display:flex;gap:14px;align-items:center}
+#clubBox{display:flex;align-items:center;gap:6px}
+#clubBox button{padding:6px 9px}
+#clubName{min-width:150px;text-align:center}
+#clubName b{display:block;font-size:15px}
+#clubName span{font-size:12px;color:var(--muted)}
+#shapeBox{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);text-align:center}
+#shapeBox canvas{cursor:crosshair;border-radius:50%}
+#meter{border-radius:8px;display:block}
+#meterWrap{display:flex;flex-direction:column;gap:3px}
+#swingHint{font-size:12px;color:var(--muted);text-align:center;min-height:16px}
+#modeBtn{font-size:12px}
+#nextBox{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);padding:12px 16px;display:flex;gap:12px;align-items:center}
+#waitBox{position:fixed;top:12px;left:50%;transform:translateX(-50%);padding:7px 14px;display:flex;gap:10px;align-items:center;font-weight:600}
+#waitBox button{font-size:12px;padding:4px 10px}
+#banner{position:fixed;top:30%;left:50%;transform:translate(-50%,-50%);font-size:46px;font-weight:900;text-shadow:0 4px 18px rgba(0,0,0,.6);pointer-events:none;opacity:0;transition:opacity .4s;text-align:center}
+#banner small{display:block;font-size:18px;font-weight:600}
+#banner.show{opacity:1}
+#feed{position:fixed;left:50%;transform:translateX(-50%);top:58px;display:flex;flex-direction:column;align-items:center;gap:4px;pointer-events:none;max-width:520px}
+#feed div{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:4px 10px;font-size:12px;animation:fade 9s forwards}
+@keyframes fade{0%{opacity:0}5%{opacity:1}85%{opacity:1}100%{opacity:0}}
+#chat{position:fixed;right:12px;bottom:12px;width:300px;display:flex;flex-direction:column}
+#chatHead{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;cursor:pointer;font-weight:700;font-size:13px}
+#chatBody{display:flex;flex-direction:column;border-top:1px solid var(--line)}
+#chat.closed #chatBody{display:none}
+#chatLog{height:170px;overflow:auto;padding:6px 10px;font-size:12.5px;display:flex;flex-direction:column;gap:3px}
+#chatLog .sys{color:var(--muted)}
+#chatForm{display:flex;gap:6px;padding:6px}
+#chatForm input{padding:6px 9px;font-size:13px}
+#unread{background:var(--red);color:#fff;border-radius:999px;padding:0 7px;font-size:11px;display:none}
+.lbl3d{position:fixed;transform:translate(-50%,-140%);font-size:11px;font-weight:700;padding:1px 6px;border-radius:6px;background:rgba(0,0,0,.55);pointer-events:none;white-space:nowrap}
+#skipBtn{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);display:none}
+#helpKeys{font-size:11px;color:var(--muted)}
+/* lobby & modal */
+#lobby{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 30%,#1e4a2c,#0c1712);z-index:5;overflow:auto;padding:20px}
+.card{background:#141b21;border:1px solid #2a3540;border-radius:16px;padding:26px;max-width:560px;width:100%}
+.card h1{margin:0 0 6px;font-size:28px}
+.card p{color:var(--muted);margin:0 0 16px}
+.field{margin-bottom:14px}.field label{display:block;font-size:13px;color:var(--muted);margin-bottom:5px}
+.seg{display:flex;gap:6px}.seg button{flex:1}.seg button.on{background:var(--gold);color:#1f1603;border-color:var(--gold);font-weight:700}
+#recent a{color:var(--gold)}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:10;padding:16px}
+#modal[hidden],[hidden]{display:none!important}
+.mbox{background:#141b21;border:1px solid #2a3540;border-radius:14px;padding:22px;max-width:760px;width:100%;max-height:90vh;overflow:auto}
+.mbox h2{margin:0 0 8px}.mbox p,.mbox li{color:var(--muted)}
+.row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center}
+.copied{color:var(--green);font-size:13px}
+table.sc{border-collapse:collapse;width:100%;font-size:13px}
+table.sc th,table.sc td{border:1px solid #2a3540;padding:4px 5px;text-align:center}
+table.sc th{background:#1b242c;color:var(--muted);font-weight:600}
+table.sc td.nm{text-align:left;white-space:nowrap}
+.s-eagle{background:#d4a017;color:#111;border-radius:50%}
+.s-birdie{box-shadow:inset 0 0 0 2px #e05252;border-radius:50%}
+.s-bogey{box-shadow:inset 0 0 0 2px #6aa7e0}
+.s-dbl{box-shadow:inset 0 0 0 2px #6aa7e0,inset 0 0 0 4px #141b21,inset 0 0 0 6px #6aa7e0}
+.replay{font-size:10px;padding:1px 5px;margin-top:2px;display:block;margin-left:auto;margin-right:auto}
+#toast{position:fixed;bottom:110px;left:50%;transform:translateX(-50%);background:#2b1416;border:1px solid var(--red);color:#fff;padding:8px 14px;border-radius:10px;z-index:20;opacity:0;transition:opacity .2s;pointer-events:none}
+#toast.show{opacity:1}
+#loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0c1712;z-index:4;font-size:18px;color:var(--muted)}
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div id="hud" hidden>
+  <div id="holeCard" class="panel">
+    <div class="t" id="holeTitle">Hole 1</div>
+    <div class="s" id="courseName"></div>
+    <div class="r"><div><div class="s">To pin</div><div class="big" id="toPin">–</div></div>
+      <div><div class="s">Stroke</div><div class="big" id="strokeNo">1</div></div>
+      <div id="wind"><svg id="windArrow" viewBox="0 0 24 24"><path d="M12 2 L18 12 H14 V22 H10 V12 H6 Z" fill="#9fe0ff"/></svg><div><div class="s">Wind</div><b id="windTxt">0 mph</b></div></div></div>
+    <div class="r"><span id="lieTag">Tee</span><span class="s" id="elevTxt"></span></div>
+  </div>
+  <canvas id="mini" width="170" height="290" title="Click to aim at a spot"></canvas>
+  <div id="board" class="panel"><div class="hdr"><b>LEADERBOARD</b><button id="cardBtn" style="font-size:11px;padding:2px 8px">Scorecard (Tab)</button></div><table id="boardT"></table>
+    <div class="row" style="margin-top:6px"><button id="inviteBtn" style="font-size:12px;flex:1">📨 Invite</button><button id="helpBtn" style="font-size:12px">?</button><button id="soundBtn" style="font-size:12px">🔊</button></div></div>
+  <div id="waitBox" class="panel" hidden><span id="waitTxt"></span><button id="readyBtn">Play now</button></div>
+  <div id="feed"></div>
+  <div id="swing" class="panel">
+    <div id="clubBox"><button id="clubPrev" title="Previous club (↓ or S)">◀</button><div id="clubName"><b>Driver</b><span>236 yds</span></div><button id="clubNext" title="Next club (↑ or W)">▶</button></div>
+    <div id="shapeBox"><canvas id="shape" width="54" height="54" title="Click to set shot shape (left/right = draw/fade) and spin (up = high spin, down = low). Double-click to reset."></canvas><div>Shape<br><b id="shapeTxt">straight</b></div></div>
+    <div id="meterWrap"><canvas id="meter" width="380" height="30"></canvas><div id="swingHint"></div></div>
+    <button id="modeBtn" title="Switch between drag swing and 3-click meter">Swing: Drag</button>
+  </div>
+  <div id="nextBox" class="panel" hidden><span id="nextTxt"></span><button class="primary" id="nextBtn">Next hole ▶</button></div>
+  <button id="skipBtn">Skip ▸▸</button>
+  <div id="chat" class="panel closed"><div id="chatHead"><span>💬 Chat <span id="unread"></span></span><span id="chatToggle">▴</span></div>
+    <div id="chatBody"><div id="chatLog"></div><form id="chatForm" autocomplete="off"><input type="text" id="chatIn" maxlength="300" placeholder="Say something… (Enter)"><button class="primary">Send</button></form></div></div>
+  <div id="netBadge"></div>
+  <div id="banner"></div>
+</div>
+<div id="labels"></div>
+
+<div id="lobby" hidden>
+  <div class="card">
+    <h1>⛳ Fairway Friends</h1>
+    <p>3D golf with 2–4 friends. Play live together, or take your shots whenever you're free: the round waits for you. No sign-in.</p>
+    <div class="field"><label for="nameIn">Your name</label><input type="text" id="nameIn" maxlength="16" placeholder="e.g. John"></div>
+    <div class="field"><label>Holes</label><div class="seg" id="holesSeg"><button data-v="3">3 holes</button><button data-v="9" class="on">9 holes</button><button data-v="18">18 holes</button></div></div>
+    <div class="field"><label for="codeIn">Course code (optional – leave blank for a brand-new course)</label><input type="text" id="codeIn" maxlength="9" placeholder="e.g. 48213"></div>
+    <button class="primary" id="createBtn" style="width:100%;padding:11px">Create round &amp; get invite link</button>
+    <div id="recent" style="margin-top:16px"></div>
+  </div>
+</div>
+<div id="loading" hidden>Loading course…</div>
+<div id="modal" hidden><div class="mbox" id="mbox"></div></div>
+<div id="toast"></div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
